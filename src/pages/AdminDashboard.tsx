@@ -54,6 +54,8 @@ export function AdminDashboard() {
   const [classesCount, setClassesCount] = useState(0)
   const [teachersCount, setTeachersCount] = useState(0)
   const [roomsCount, setRoomsCount] = useState(0)
+  const [announcements, setAnnouncements] = useState<any[]>([])
+  const [events, setEvents] = useState<any[]>([])
 
   const animatedStudentCount = useCountAnimation(studentCount)
   const animatedMalePercent = useCountAnimation(maleCount > 0 ? Math.round(maleCount / (maleCount + femaleCount) * 100) : 0)
@@ -74,12 +76,14 @@ export function AdminDashboard() {
 
     try {
       // Run all queries in PARALLEL for faster loading
-      const [yearsResult, studentsResult, genderResult, classesResult, teachersResult] = await Promise.all([
+      const [yearsResult, studentsResult, genderResult, classesResult, teachersResult, annsResult, eventsResult] = await Promise.all([
         supabase.from('academic_years').select('*').order('start_date', { ascending: false }),
         supabase.from('student_records').select('*', { count: 'exact', head: true }).eq('school_year', selectedYear),
         supabase.from('student_records').select('gender').eq('school_year', selectedYear),
         supabase.from('student_records').select('level').eq('school_year', selectedYear),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher')
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'teacher'),
+        supabase.from('announcements').select('*').order('published_at', { ascending: false }).limit(3),
+        supabase.from('school_events').select('*').gte('event_date', new Date().toISOString()).order('event_date', { ascending: true }).limit(4)
       ])
 
       // Process results
@@ -109,6 +113,8 @@ export function AdminDashboard() {
 
       setTeachersCount(teachersResult.count || 13)
       setRoomsCount(15)
+      setAnnouncements(annsResult.data || [])
+      setEvents(eventsResult.data || [])
       void years
     } finally {
       setLoading(false)
@@ -469,30 +475,20 @@ export function AdminDashboard() {
               <button className="text-xs px-2 py-1 rounded-full text-white hover:opacity-80 transition-opacity" style={{ backgroundColor: '#5B8C51' }}>+ New</button>
             </div>
             <div className="space-y-3">
-              <div className="p-3 bg-red-50 rounded-xl border-l-4 border-red-500 hover:shadow-sm transition-shadow">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full animate-pulse">Urgent</span>
-                  <span className="text-xs text-gray-400">2 hours ago</span>
+              {announcements.length > 0 ? announcements.map((ann, index) => (
+                <div key={index} className={`p-3 rounded-xl border-l-4 hover:shadow-sm transition-shadow ${index === 0 ? 'bg-red-50 border-red-500' : 'bg-blue-50 border-blue-500'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-2 py-0.5 text-white text-xs rounded-full ${index === 0 ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`}>
+                      {index === 0 ? 'New' : 'Info'}
+                    </span>
+                    <span className="text-xs text-gray-400">{new Date(ann.published_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-800 truncate" title={ann.title}>{ann.title}</p>
+                  <p className="text-xs text-gray-500 truncate" title={ann.content}>{ann.content}</p>
                 </div>
-                <p className="text-sm font-medium text-gray-800">Early Dismissal on Friday</p>
-                <p className="text-xs text-gray-500">All students will be dismissed at 12:00 PM</p>
-              </div>
-              <div className="p-3 bg-blue-50 rounded-xl border-l-4 border-blue-500 hover:shadow-sm transition-shadow">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">Info</span>
-                  <span className="text-xs text-gray-400">Yesterday</span>
-                </div>
-                <p className="text-sm font-medium text-gray-800">Parent-Teacher Conference</p>
-                <p className="text-xs text-gray-500">Schedule available on portal</p>
-              </div>
-              <div className="p-3 bg-green-50 rounded-xl border-l-4 border-green-500 hover:shadow-sm transition-shadow">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded-full">New</span>
-                  <span className="text-xs text-gray-400">3 days ago</span>
-                </div>
-                <p className="text-sm font-medium text-gray-800">Library Hours Extended</p>
-                <p className="text-xs text-gray-500">Now open until 6:00 PM</p>
-              </div>
+              )) : (
+                <div className="text-sm text-gray-400 py-4 text-center">No recent announcements</div>
+              )}
             </div>
           </div>
 
@@ -503,38 +499,27 @@ export function AdminDashboard() {
               <span className="text-xs text-gray-400">This Month</span>
             </div>
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2 bg-purple-50 rounded-xl hover:shadow-sm transition-shadow">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: '#E1BEE7' }}>🎭</div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">Drama Club Performance</p>
-                  <p className="text-xs text-gray-500">Jan 15 • Auditorium</p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-600">Ongoing</span>
-              </div>
-              <div className="flex items-center gap-3 p-2 bg-cyan-50 rounded-xl hover:shadow-sm transition-shadow">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: '#B2EBF2' }}>🏀</div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">Basketball Tournament</p>
-                  <p className="text-xs text-gray-500">Jan 20 • Sports Complex</p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-cyan-100 text-cyan-600">Upcoming</span>
-              </div>
-              <div className="flex items-center gap-3 p-2 bg-amber-50 rounded-xl hover:shadow-sm transition-shadow">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: '#FFE082' }}>🎨</div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">Art Exhibition</p>
-                  <p className="text-xs text-gray-500">Jan 25 • Main Hall</p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-600">Upcoming</span>
-              </div>
-              <div className="flex items-center gap-3 p-2 bg-pink-50 rounded-xl hover:shadow-sm transition-shadow">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: '#F8BBD9' }}>🎵</div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">Music Festival</p>
-                  <p className="text-xs text-gray-500">Jan 30 • Open Grounds</p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-pink-100 text-pink-600">Upcoming</span>
-              </div>
+              {events.length > 0 ? events.map((event, index) => {
+                const colors = [
+                  { bg: 'bg-purple-50', iconBg: '#E1BEE7', text: 'text-purple-600', badgeBg: 'bg-purple-100', icon: '🎭' },
+                  { bg: 'bg-cyan-50', iconBg: '#B2EBF2', text: 'text-cyan-600', badgeBg: 'bg-cyan-100', icon: '🏀' },
+                  { bg: 'bg-amber-50', iconBg: '#FFE082', text: 'text-amber-600', badgeBg: 'bg-amber-100', icon: '🎨' },
+                  { bg: 'bg-pink-50', iconBg: '#F8BBD9', text: 'text-pink-600', badgeBg: 'bg-pink-100', icon: '🎵' }
+                ];
+                const color = colors[index % colors.length];
+                return (
+                  <div key={index} className={`flex items-center gap-3 p-2 ${color.bg} rounded-xl hover:shadow-sm transition-shadow`}>
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: color.iconBg }}>{color.icon}</div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800 truncate" title={event.title}>{event.title}</p>
+                      <p className="text-xs text-gray-500">{new Date(event.event_date).toLocaleDateString()} • {event.event_type}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full ${color.badgeBg} ${color.text}`}>Upcoming</span>
+                  </div>
+                );
+              }) : (
+                <div className="text-sm text-gray-400 py-4 text-center">No upcoming events</div>
+              )}
             </div>
           </div>
         </div>

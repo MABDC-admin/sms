@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import type { TeacherKpis, Submission } from '../types'
+import type { TeacherKpis } from '../types'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -13,39 +13,68 @@ export function TeacherDashboard() {
   const currentUser = profile || demoUser
   
   const [kpis, setKpis] = useState<TeacherKpis | null>(null)
-  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [submissions, setSubmissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeClasses, setActiveClasses] = useState(0)
 
   useEffect(() => {
     async function loadData() {
+      if (!currentUser?.id) return
       setLoading(true)
 
-      const { data: kpiData } = await supabase
-        .from('v_teacher_kpis_year')
-        .select('*')
-        .maybeSingle()
+      try {
+        const { data: kpiData } = await supabase
+          .from('v_teacher_kpis_year')
+          .select('*')
+          .maybeSingle()
+        
+        setKpis(kpiData as TeacherKpis | null)
 
-      const { data: submissionsData } = await supabase
-        .from('submissions')
-        .select(`*, assignments:assignment_id (title), profiles:student_id (full_name)`)
-        .in('status', ['submitted', 'late'])
-        .is('graded_at', null)
-        .order('submitted_at', { ascending: false })
-        .limit(5)
+        // My Active classes
+        const { count: classesCount } = await supabase
+          .from('class_teachers')
+          .select('*', { count: 'exact', head: true })
+          .eq('teacher_id', currentUser.id)
+        
+        setActiveClasses(classesCount || 0)
 
-      const transformedSubmissions = (submissionsData || []).map((sub: any) => ({
-        ...sub,
-        assignment_title: sub.assignments?.title,
-        student_name: sub.profiles?.full_name
-      }))
-
-      setKpis(kpiData as TeacherKpis | null)
-      setSubmissions(transformedSubmissions)
+        // Submissions for assignments created by this teacher
+        const { data: teacherClasses } = await supabase
+          .from('class_teachers')
+          .select('class_id')
+          .eq('teacher_id', currentUser.id)
+          
+        const classIds = teacherClasses?.map(tc => tc.class_id) || []
+        
+        if (classIds.length > 0) {
+          const { data: assignments } = await supabase
+            .from('assignments')
+            .select('id')
+            .in('class_id', classIds)
+            
+          const assignmentIds = assignments?.map(a => a.id) || []
+          
+          if (assignmentIds.length > 0) {
+            const { data: subs } = await supabase
+              .from('submissions')
+              .select(`*, assignments:assignment_id(title), profiles:student_id(full_name)`)
+              .in('assignment_id', assignmentIds)
+              .in('status', ['submitted', 'late'])
+              .is('graded_at', null)
+              .order('submitted_at', { ascending: false })
+              .limit(5)
+              
+            setSubmissions(subs || [])
+          }
+        }
+      } catch (err) {
+        console.error("Error loading teacher dashboard:", err)
+      }
       setLoading(false)
     }
 
     loadData()
-  }, [])
+  }, [currentUser?.id])
 
   const attendanceBarData = [
     { day: 'Sep', value: 45 }, { day: 'Mon', value: 55 }, { day: 'Tue', value: 48 },
@@ -64,12 +93,6 @@ export function TeacherDashboard() {
     { name: 'Active', value: 70, color: '#5B8C51' },
     { name: 'Passive', value: 20, color: '#C4A642' },
     { name: 'Disengaged', value: 10, color: '#D4763A' },
-  ]
-
-  const displaySubmissions = submissions.length > 0 ? submissions : [
-    { id: '1', student_name: 'Emily Clark', assignment_title: 'Math Assignment', submitted_at: new Date().toISOString() },
-    { id: '2', student_name: 'John Smith', assignment_title: 'Science Project', submitted_at: new Date().toISOString() },
-    { id: '3', student_name: 'Sarah Lee', assignment_title: 'History Essay', submitted_at: new Date().toISOString() },
   ]
 
   return (
@@ -103,7 +126,7 @@ export function TeacherDashboard() {
                 </div>
                 <span className="text-xs text-gray-500">My Active Classes</span>
               </div>
-              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : (kpis?.my_classes || 6)}</p>
+              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : activeClasses}</p>
             </div>
             <div className="p-4 rounded-xl" style={{ backgroundColor: '#F8FAF7' }}>
               <div className="flex items-center gap-2 mb-2">
@@ -112,7 +135,7 @@ export function TeacherDashboard() {
                 </div>
                 <span className="text-xs text-gray-500">Today's Classes</span>
               </div>
-              <p className="text-3xl font-bold text-gray-800">4</p>
+              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : ((kpis as any)?.today_classes || 0)}</p>
             </div>
             <div className="p-4 rounded-xl" style={{ backgroundColor: '#F8FAF7' }}>
               <div className="flex items-center gap-2 mb-2">
@@ -121,7 +144,7 @@ export function TeacherDashboard() {
                 </div>
                 <span className="text-xs text-gray-500">Assignments to Check</span>
               </div>
-              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : (kpis?.submissions_to_check || 18)}</p>
+              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : submissions.length}</p>
             </div>
             <div className="p-4 rounded-xl" style={{ backgroundColor: '#F8FAF7' }}>
               <div className="flex items-center gap-2 mb-2">
@@ -130,7 +153,7 @@ export function TeacherDashboard() {
                 </div>
                 <span className="text-xs text-gray-500">Absent Students Today</span>
               </div>
-              <p className="text-3xl font-bold text-gray-800">7</p>
+              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : ((kpis as any)?.absent_students_today || 0)}</p>
             </div>
           </div>
         </div>
@@ -140,7 +163,7 @@ export function TeacherDashboard() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Class Attendance Trend</h3>
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Sep 16 - Sep 23</span>
+              <span>Past 15 days</span>
               <span className="px-2 py-1 rounded" style={{ backgroundColor: '#E8F5E3', color: '#5B8C51' }}>📅</span>
             </div>
           </div>
@@ -214,17 +237,19 @@ export function TeacherDashboard() {
             <span className="text-gray-400">›</span>
           </div>
           <div className="space-y-4">
-            {displaySubmissions.slice(0, 3).map((sub: any, index) => (
+            {submissions.length > 0 ? submissions.map((sub: any, index) => (
               <div key={sub.id} className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${sub.student_name || index}`} alt="Avatar" className="w-full h-full object-cover" />
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${sub.profiles?.full_name || index}`} alt="Avatar" className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-800">{sub.student_name || 'Unknown Student'}</p>
-                  <p className="text-xs text-gray-500">{sub.assignment_title || 'Assignment'}</p>
+                  <p className="text-sm font-medium text-gray-800">{sub.profiles?.full_name || 'Unknown Student'}</p>
+                  <p className="text-xs text-gray-500">{sub.assignments?.title || 'Assignment'}</p>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-sm text-gray-400">No pending submissions</div>
+            )}
           </div>
         </div>
       </div>

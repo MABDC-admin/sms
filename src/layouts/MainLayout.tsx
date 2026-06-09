@@ -11,9 +11,9 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { icon: '📊', label: 'Dashboard', path: '/dashboard' },
   { icon: '📚', label: 'Grade Levels', path: '/grade-levels', roles: ['admin'] },
-  { icon: '👤', label: 'Students', path: '/students', roles: ['admin', 'teacher'] },
-  { icon: '📋', label: 'Records', path: '/records', roles: ['admin'] },
-  { icon: '🅿️', label: 'Teachers', path: '/teachers', roles: ['admin'] },
+  { icon: '👤', label: 'Students', path: '/students', roles: ['admin', 'teacher', 'finance'] },
+  { icon: '📋', label: 'Records', path: '/records', roles: ['admin', 'finance'] },
+  { icon: '🅿️', label: 'Teachers', path: '/teachers', roles: ['admin', 'finance'] },
   { icon: '📖', label: 'Classes', path: '/classes', roles: ['admin', 'teacher'] },
   { icon: '✅', label: 'Attendance', path: '/attendance', roles: ['admin', 'teacher'] },
   { icon: '📅', label: 'Calendar', path: '/calendar', roles: ['admin', 'teacher', 'student'] },

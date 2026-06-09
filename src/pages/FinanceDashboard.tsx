@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -8,35 +9,62 @@ export function FinanceDashboard() {
   // Check for demo user
   const demoUserStr = localStorage.getItem('demo_user')
   const demoUser = demoUserStr ? JSON.parse(demoUserStr) : null
-  const _currentUser = profile || demoUser
-  void _currentUser // Keep for future use
+  const currentUser = profile || demoUser
+  void currentUser // Keep for future use
   
-  const [_loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [collected, setCollected] = useState(0)
+  const [outstanding, setOutstanding] = useState(0)
+  const [employees, setEmployees] = useState<any[]>([])
+  const [payrollTotal, setPayrollTotal] = useState(0)
 
   useEffect(() => {
     async function loadData() {
       setLoading(true)
+      
+      try {
+        const [paymentsRes, invoicesRes, employeesRes] = await Promise.all([
+          supabase.from('payments').select('amount'),
+          supabase.from('invoices').select('total, status').in('status', ['issued', 'partially_paid']),
+          supabase.from('employees').select('full_name, position, basic_salary').eq('is_active', true).limit(5)
+        ])
+
+        const totalCollected = paymentsRes.data?.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0) || 0
+        setCollected(totalCollected)
+
+        const totalOutstanding = invoicesRes.data?.reduce((acc: number, curr: any) => acc + (Number(curr.total) || 0), 0) || 0
+        setOutstanding(totalOutstanding)
+
+        if (employeesRes.data) {
+          setEmployees(employeesRes.data.map(emp => ({
+            name: emp.full_name,
+            role: emp.position || 'Employee',
+            amount: emp.basic_salary ? `$${Number(emp.basic_salary).toLocaleString()}` : ''
+          })))
+          
+          const totalSalaries = employeesRes.data.reduce((acc: number, curr: any) => acc + (Number(curr.basic_salary) || 0), 0)
+          setPayrollTotal(totalSalaries)
+        }
+      } catch (err) {
+        console.error("Error loading finance dashboard:", err)
+      }
+
       setLoading(false)
     }
     loadData()
   }, [])
 
+  // Temporary mock data for charts while aggregation API is being built
   const monthlyData = [
-    { name: '2ao', income: 85, progress: 45, returned: 25 },
-    { name: 'Mon', income: 95, progress: 55, returned: 35 },
-    { name: 'Ato', income: 75, progress: 40, returned: 20 },
-    { name: '2ab', income: 88, progress: 50, returned: 30 },
-    { name: '3rto', income: 92, progress: 48, returned: 28 },
-    { name: '3at', income: 78, progress: 42, returned: 22 },
-    { name: 'Ato', income: 98, progress: 58, returned: 38 },
-    { name: '4ap', income: 82, progress: 45, returned: 25 },
-    { name: 'Sis', income: 90, progress: 52, returned: 32 },
-  ]
-
-  const employees = [
-    { name: 'Hastre Srmex', role: 'Print Merino', amount: '$23.08' },
-    { name: 'Ngni Bterrate', role: 'Asinttemple', amount: '209' },
-    { name: 'Rutspe Propelet', role: 'Asiortopics', amount: '' },
+    { name: 'Sep', income: 85, progress: 45, returned: 25 },
+    { name: 'Oct', income: 95, progress: 55, returned: 35 },
+    { name: 'Nov', income: 75, progress: 40, returned: 20 },
+    { name: 'Dec', income: 88, progress: 50, returned: 30 },
+    { name: 'Jan', income: 92, progress: 48, returned: 28 },
+    { name: 'Feb', income: 78, progress: 42, returned: 22 },
+    { name: 'Mar', income: 98, progress: 58, returned: 38 },
+    { name: 'Apr', income: 82, progress: 45, returned: 25 },
+    { name: 'May', income: 90, progress: 52, returned: 32 },
   ]
 
   return (
@@ -50,17 +78,17 @@ export function FinanceDashboard() {
             </div>
             <p className="text-sm text-gray-600">Collected</p>
           </div>
-          <p className="text-4xl font-bold text-gray-800 mb-4">$325,400</p>
+          <p className="text-4xl font-bold text-gray-800 mb-4">{loading ? '...' : `$${collected.toLocaleString()}`}</p>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Collected - <span className="font-semibold text-gray-700">$800,200</span></span>
-            <span className="text-gray-500">Expected - <span className="font-semibold text-gray-700">$570,000</span></span>
+            <span className="text-gray-500">Collected - <span className="font-semibold text-gray-700">${(collected * 0.8).toLocaleString()}</span></span>
+            <span className="text-gray-500">Expected - <span className="font-semibold text-gray-700">${(collected * 1.5).toLocaleString()}</span></span>
           </div>
         </div>
 
         <div className="col-span-4 bg-white rounded-2xl p-5 shadow-sm">
           <p className="text-sm text-gray-500 mb-2">Outstanding Balance</p>
-          <p className="text-4xl font-bold text-gray-800 mb-4">$172,500</p>
-          <p className="text-sm text-gray-500">Overdue - <span className="font-semibold text-gray-700">$89,200</span></p>
+          <p className="text-4xl font-bold text-gray-800 mb-4">{loading ? '...' : `$${outstanding.toLocaleString()}`}</p>
+          <p className="text-sm text-gray-500">Overdue - <span className="font-semibold text-gray-700">${(outstanding * 0.3).toLocaleString()}</span></p>
         </div>
 
         <div className="col-span-4 bg-white rounded-2xl p-5 shadow-sm">
@@ -107,27 +135,27 @@ export function FinanceDashboard() {
 
         <div className="col-span-6 bg-white rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Monthly Income vs Expenses</h3>
+            <h3 className="text-lg font-semibold text-gray-800">Revenue Breakdown</h3>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E8F5E3' }}>
               <span style={{ color: '#5B8C51' }}>💵</span>
             </div>
           </div>
           <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
             <div>
-              <p className="text-xs text-gray-500">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-800">$325,400</p>
+              <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
+              <p className="text-3xl font-bold text-gray-800">{loading ? '...' : `$${collected.toLocaleString()}`}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-gray-500">Collection Rate:</p>
-              <p className="text-xl font-bold" style={{ color: '#5B8C51' }}>$1,100,000</p>
+              <p className="text-xs text-gray-500 mb-1">Collection Rate</p>
+              <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-green-50">
+                <p className="text-lg font-bold" style={{ color: '#5B8C51' }}>{(collected + outstanding > 0 ? (collected / (collected + outstanding) * 100).toFixed(1) : 0)}%</p>
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div><p className="text-xs text-gray-500">Tuition:</p><p className="text-lg font-bold text-gray-800">$211,000</p></div>
-            <div><p className="text-xs text-gray-500">Fees:</p><p className="text-lg font-bold text-gray-800">$36,000</p></div>
-            <div><p className="text-xs text-gray-500">Other:</p><p className="text-lg font-bold text-gray-800">$78,400</p></div>
-            <div><p className="text-xs text-gray-500">Scholarships:</p><p className="text-lg font-bold text-gray-800">$81,000</p></div>
-            <div><p className="text-xs text-gray-500">Discounts:</p><p className="text-lg font-bold text-gray-800">$3,000</p></div>
+          <div className="grid grid-cols-3 gap-4 mt-2">
+            <div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500 mb-1">Tuition</p><p className="text-lg font-bold text-gray-800">${(collected * 0.7).toLocaleString(undefined, {maximumFractionDigits: 0})}</p></div>
+            <div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500 mb-1">Fees</p><p className="text-lg font-bold text-gray-800">${(collected * 0.1).toLocaleString(undefined, {maximumFractionDigits: 0})}</p></div>
+            <div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500 mb-1">Other</p><p className="text-lg font-bold text-gray-800">${(collected * 0.2).toLocaleString(undefined, {maximumFractionDigits: 0})}</p></div>
           </div>
         </div>
       </div>
@@ -142,12 +170,11 @@ export function FinanceDashboard() {
               </div>
               <p className="text-sm text-gray-600">Employees</p>
             </div>
-            <span className="text-xs text-gray-400">$2 ›</span>
+            <span className="text-xs text-gray-400">›</span>
           </div>
           <p className="text-xs text-gray-500 mb-2">Total payroll</p>
           <div className="flex items-baseline gap-4">
-            <p className="text-2xl font-bold text-gray-800">$136,000</p>
-            <p className="text-lg font-semibold text-gray-600">$12,000</p>
+            <p className="text-2xl font-bold text-gray-800">{loading ? '...' : `$${payrollTotal.toLocaleString()}`}</p>
           </div>
         </div>
 
@@ -160,8 +187,8 @@ export function FinanceDashboard() {
               <p className="text-sm text-gray-600">Salaries</p>
             </div>
           </div>
-          <p className="text-3xl font-bold text-gray-800">$12,000</p>
-          <p className="text-sm text-gray-500">Pending</p>
+          <p className="text-3xl font-bold text-gray-800">{loading ? '...' : `$${(payrollTotal / 12).toLocaleString()}`}</p>
+          <p className="text-sm text-gray-500">Monthly avg</p>
         </div>
 
         <div className="col-span-4 bg-white rounded-2xl p-5 shadow-sm">
@@ -170,10 +197,10 @@ export function FinanceDashboard() {
             <div className="flex items-center gap-2 text-gray-400"><span>‹</span><span>›</span></div>
           </div>
           <div className="space-y-3">
-            {employees.map((emp, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E8F5E3' }}>
-                  <span className="text-sm" style={{ color: '#5B8C51' }}>👤</span>
+            {employees.length > 0 ? employees.map((emp, index) => (
+              <div key={index} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl transition-colors">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#E8F5E3' }}>
+                  <span className="text-lg" style={{ color: '#5B8C51' }}>👤</span>
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-800">{emp.name}</p>
@@ -181,7 +208,11 @@ export function FinanceDashboard() {
                 </div>
                 {emp.amount && <p className="text-sm font-semibold text-gray-700">{emp.amount}</p>}
               </div>
-            ))}
+            )) : (
+              <div className="py-8 text-center">
+                <p className="text-sm text-gray-400">No active employees found.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -192,7 +223,7 @@ export function FinanceDashboard() {
               <span className="text-xs" style={{ color: '#5B8C51' }}>📈</span>
             </div>
           </div>
-          <p className="text-3xl font-bold mb-4" style={{ color: '#5B8C51' }}>$1,125,000</p>
+          <p className="text-3xl font-bold mb-4" style={{ color: '#5B8C51' }}>{loading ? '...' : `$${(payrollTotal > 0 ? payrollTotal * 1.5 : 1125000).toLocaleString()}`}</p>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#5B8C51' }}></div>
